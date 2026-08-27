@@ -1,0 +1,13 @@
+# Netlify configuration for the Agrifarm static site + price bot functions.
+#
+# The site itself is plain static HTML/CSS/JS at the repo root — nothing to
+# build. The only thing Netlify needs to do is install the one dependency
+# the functions use (@netlify/blobs) and expose netlify/functions/.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "npm install"
+
+[functions]
+  node_bundler = "esbuild"
