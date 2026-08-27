@@ -93,25 +93,33 @@ async function pricesText(store) {
 
 async function sendTelegramMessage(chatId, text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return;
+  if (!token) {
+    console.error("TELEGRAM_BOT_TOKEN is missing — set it in Netlify environment variables.");
+    return;
+  }
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text }),
     });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error("Telegram sendMessage failed:", res.status, body);
+    }
   } catch (err) {
-    // If Telegram's API is briefly unreachable there's nothing useful to
-    // do here — the price change itself already succeeded or failed
-    // independently of whether the confirmation message goes out.
+    console.error("Telegram sendMessage threw:", err && err.message);
   }
 }
 
 exports.handler = async (event) => {
+  console.log("telegram-webhook invoked");
+
   const secretHeader =
     event.headers["x-telegram-bot-api-secret-token"] ||
     event.headers["X-Telegram-Bot-Api-Secret-Token"];
   if (!process.env.TELEGRAM_WEBHOOK_SECRET || secretHeader !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    console.error("Webhook secret mismatch — check TELEGRAM_WEBHOOK_SECRET matches what you registered with Telegram.");
     return { statusCode: 401, body: "unauthorized" };
   }
 
