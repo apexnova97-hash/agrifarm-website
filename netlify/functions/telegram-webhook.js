@@ -132,7 +132,13 @@ exports.handler = async (event) => {
   const adminId = String(process.env.TELEGRAM_ADMIN_ID || "");
 
   if (!adminId || fromId !== adminId) {
-    await sendTelegramMessage(chatId, "This bot is private — you're not authorized to use it.");
+    await sendTelegramMessage(
+      chatId,
+      "This bot is private — you're not authorized to use it.\n\n" +
+        "Your Telegram ID: " + fromId + "\n" +
+        "ID this bot is configured to allow: " + (adminId || "(not set)") +
+        "\n\nIf this is actually you, update TELEGRAM_ADMIN_ID in Netlify to match your ID above, then redeploy."
+    );
     return { statusCode: 200, body: "ok" };
   }
 
