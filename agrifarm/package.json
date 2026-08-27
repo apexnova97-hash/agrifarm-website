@@ -1,0 +1,9 @@
+{
+  "name": "agrifarm-site",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Agrifarm PLC website — static site plus a private Telegram bot for product pricing.",
+  "dependencies": {
+    "@netlify/blobs": "*"
+  }
+}
