@@ -1,22 +1,7 @@
 // POST /.netlify/functions/telegram-webhook
 //
-// This is the URL you give Telegram when you register your bot's webhook.
-// Every message sent to the bot arrives here as a POST from Telegram's
-// servers. Two independent checks keep it private:
-//
-//   1. Telegram sends a secret header on every webhook call, which must
-//      match TELEGRAM_WEBHOOK_SECRET (set when you register the webhook).
-//   2. Even if that header were somehow spoofed, the handler still checks
-//      the sender's numeric Telegram user ID against TELEGRAM_ADMIN_ID
-//      before touching any price. Anyone else gets a polite refusal.
-//
-// Commands (send these to your bot in Telegram):
-//   /setprice PRODUCT NAME PRICE      e.g. /setprice MEGAMIN 450
-//   /setprices                        then one "NAME PRICE" per line —
-//                                     for setting many prices in one go
-//   /removeprice PRODUCT NAME         reverts that product to its default
-//   /prices                           lists every product and its price
-//   /help                             shows this command list
+// Private Telegram price-management bot. In addition to changing prices,
+// the admin can globally hide or show every price on the public website.
 
 const { getStore } = require("@netlify/blobs");
 const { PRODUCT_NAMES, DEFAULT_PRICES } = require("./_shared/products");
@@ -46,7 +31,9 @@ function parseSetPrice(text) {
 
 async function getPrices(store) {
   const stored = (await store.get("prices", { type: "json" })) || {};
-  return { ...DEFAULT_PRICES, ...stored };
+  const showPrices = stored.showPrices !== false;
+  delete stored.showPrices;
+  return { prices: { ...DEFAULT_PRICES, ...stored }, showPrices };
 }
 
 async function setPrice(store, name, price) {
@@ -61,6 +48,12 @@ async function removePrice(store, name) {
   await store.setJSON("prices", stored);
 }
 
+async function setPricesVisible(store, visible) {
+  const stored = (await store.get("prices", { type: "json" })) || {};
+  stored.showPrices = visible;
+  await store.setJSON("prices", stored);
+}
+
 function fmt(n) {
   return Number(n).toLocaleString("en-US");
 }
@@ -69,10 +62,14 @@ function helpText() {
   return [
     "Agrifarm price bot — commands:",
     "",
+    "/showprices — show all prices on the website",
+    "/hideprices — hide all prices on the website",
+    "/pricestatus — check whether prices are visible",
+    "",
     "/setprice NAME PRICE",
     "  e.g. /setprice MEGAMIN 450",
     "",
-    "/setprices — then send one product per line:",
+    "/setprices — then one product per line:",
     "  MEGAMIN 450",
     "  GARLI MINT 380",
     "  HEPAVET 600",
@@ -84,8 +81,9 @@ function helpText() {
 }
 
 async function pricesText(store) {
-  const prices = await getPrices(store);
-  return PRODUCT_NAMES.map((p) => {
+  const { prices, showPrices } = await getPrices(store);
+  const header = `Website prices: ${showPrices ? "VISIBLE" : "HIDDEN"}`;
+  return header + "\n\n" + PRODUCT_NAMES.map((p) => {
     const price = prices[p];
     return price !== undefined ? `${p}: ${fmt(price)} ETB` : `${p}: (not set)`;
   }).join("\n");
@@ -150,7 +148,6 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "ok" };
   }
 
-  // --- UPDATED BLOBS INITIALIZATION USING MY_SITE_ID ---
   const store = getStore({
     name: "agrifarm-prices",
     siteID: process.env.MY_SITE_ID,
@@ -161,6 +158,15 @@ exports.handler = async (event) => {
 
   if (/^\/(start|help)/i.test(text)) {
     await sendTelegramMessage(chatId, helpText());
+  } else if (/^\/showprices(?:@\w+)?\s*$/i.test(text)) {
+    await setPricesVisible(store, true);
+    await sendTelegramMessage(chatId, "✅ All prices are now VISIBLE on the website.");
+  } else if (/^\/hideprices(?:@\w+)?\s*$/i.test(text)) {
+    await setPricesVisible(store, false);
+    await sendTelegramMessage(chatId, "🔒 All prices are now HIDDEN on the website.");
+  } else if (/^\/pricestatus(?:@\w+)?\s*$/i.test(text)) {
+    const { showPrices } = await getPrices(store);
+    await sendTelegramMessage(chatId, showPrices ? "🟢 Prices are VISIBLE on the website." : "🔴 Prices are HIDDEN on the website.");
   } else if (/^\/prices/i.test(text)) {
     await sendTelegramMessage(chatId, await pricesText(store));
   } else if (/^\/removeprice/i.test(text)) {
