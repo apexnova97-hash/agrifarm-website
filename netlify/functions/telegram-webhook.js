@@ -150,10 +150,10 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "ok" };
   }
 
-  // --- UPDATED BLOBS INITIALIZATION ---
+  // --- UPDATED BLOBS INITIALIZATION USING MY_SITE_ID ---
   const store = getStore({
     name: "agrifarm-prices",
-    siteID: process.env.SITE_ID,
+    siteID: process.env.MY_SITE_ID,
     token: process.env.NETLIFY_AUTH_TOKEN,
   });
 
