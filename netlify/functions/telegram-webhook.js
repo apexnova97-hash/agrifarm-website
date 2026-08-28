@@ -58,48 +58,63 @@ function fmt(n) {
   return Number(n).toLocaleString("en-US");
 }
 
+// Simple Telegram reply keyboard so the most common actions are one tap away.
+function mainKeyboard() {
+  return {
+    keyboard: [
+      [{ text: "🟢 Show All Prices" }, { text: "🔴 Hide All Prices" }],
+      [{ text: "📊 Price Status" }, { text: "💰 View All Prices" }],
+      [{ text: "✏️ Set a Price" }, { text: "↩️ Reset a Price" }],
+      [{ text: "❓ Help" }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
 function helpText() {
   return [
-    "Agrifarm price bot — commands:",
+    "🌾 Agrifarm Price Manager",
     "",
-    "/showprices — show all prices on the website",
-    "/hideprices — hide all prices on the website",
-    "/pricestatus — check whether prices are visible",
+    "Use the buttons below for the common actions.",
     "",
-    "/setprice NAME PRICE",
-    "  e.g. /setprice MEGAMIN 450",
+    "✏️ To change one price:",
+    "/setprice PRODUCT NAME PRICE",
+    "Example: /setprice MEGAMIN 450",
     "",
-    "/setprices — then one product per line:",
-    "  MEGAMIN 450",
-    "  GARLI MINT 380",
-    "  HEPAVET 600",
+    "📋 To change several prices at once:",
+    "/setprices",
+    "Then put one product per line:",
+    "MEGAMIN 450",
+    "GARLI MINT 380",
+    "HEPAVET 600",
     "",
-    "/removeprice NAME — reverts to the site default",
-    "/prices — show every product and its current price",
-    "/help — show this message",
+    "↩️ Reset a product with /removeprice PRODUCT NAME",
   ].join("\n");
 }
 
 async function pricesText(store) {
   const { prices, showPrices } = await getPrices(store);
-  const header = `Website prices: ${showPrices ? "VISIBLE" : "HIDDEN"}`;
+  const header = `Website prices: ${showPrices ? "VISIBLE 🟢" : "HIDDEN 🔴"}`;
   return header + "\n\n" + PRODUCT_NAMES.map((p) => {
     const price = prices[p];
     return price !== undefined ? `${p}: ${fmt(price)} ETB` : `${p}: (not set)`;
   }).join("\n");
 }
 
-async function sendTelegramMessage(chatId, text) {
+async function sendTelegramMessage(chatId, text, withKeyboard = true) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     console.error("TELEGRAM_BOT_TOKEN is missing — set it in Netlify environment variables.");
     return;
   }
   try {
+    const payload = { chat_id: chatId, text };
+    if (withKeyboard) payload.reply_markup = mainKeyboard();
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const body = await res.text();
@@ -156,18 +171,20 @@ exports.handler = async (event) => {
 
   const text = message.text.trim();
 
-  if (/^\/(start|help)/i.test(text)) {
+  // Button labels are handled exactly like commands, so buttons and commands
+  // always operate on the same underlying price settings.
+  if (/^\/(start|help)/i.test(text) || text === "❓ Help") {
     await sendTelegramMessage(chatId, helpText());
-  } else if (/^\/showprices(?:@\w+)?\s*$/i.test(text)) {
+  } else if (/^\/showprices(?:@\w+)?\s*$/i.test(text) || text === "🟢 Show All Prices") {
     await setPricesVisible(store, true);
-    await sendTelegramMessage(chatId, "✅ All prices are now VISIBLE on the website.");
-  } else if (/^\/hideprices(?:@\w+)?\s*$/i.test(text)) {
+    await sendTelegramMessage(chatId, "✅ All prices are now VISIBLE on the website.\n\nCustomers can see prices again.");
+  } else if (/^\/hideprices(?:@\w+)?\s*$/i.test(text) || text === "🔴 Hide All Prices") {
     await setPricesVisible(store, false);
-    await sendTelegramMessage(chatId, "🔒 All prices are now HIDDEN on the website.");
-  } else if (/^\/pricestatus(?:@\w+)?\s*$/i.test(text)) {
+    await sendTelegramMessage(chatId, "🔒 All prices are now HIDDEN on the website.\n\nCustomers will not see product prices or the order total.");
+  } else if (/^\/pricestatus(?:@\w+)?\s*$/i.test(text) || text === "📊 Price Status") {
     const { showPrices } = await getPrices(store);
     await sendTelegramMessage(chatId, showPrices ? "🟢 Prices are VISIBLE on the website." : "🔴 Prices are HIDDEN on the website.");
-  } else if (/^\/prices/i.test(text)) {
+  } else if (/^\/prices/i.test(text) || text === "💰 View All Prices") {
     await sendTelegramMessage(chatId, await pricesText(store));
   } else if (/^\/removeprice/i.test(text)) {
     const nameRaw = text.replace(/^\/removeprice(@\w+)?\s*/i, "").trim();
@@ -179,8 +196,18 @@ exports.handler = async (event) => {
       );
     } else {
       await removePrice(store, found.match);
-      await sendTelegramMessage(chatId, `Reverted "${found.match}" to its default price.`);
+      await sendTelegramMessage(chatId, `↩️ Reverted "${found.match}" to its default price.`);
     }
+  } else if (text === "✏️ Set a Price") {
+    await sendTelegramMessage(
+      chatId,
+      "✏️ Set a product price\n\nType it like this:\n/setprice PRODUCT NAME PRICE\n\nExample:\n/setprice MEGAMIN 450\n\nFor a product with spaces:\n/setprice GARLI MINT 380"
+    );
+  } else if (text === "↩️ Reset a Price") {
+    await sendTelegramMessage(
+      chatId,
+      "↩️ Reset a product to its default price\n\nType:\n/removeprice PRODUCT NAME\n\nExample:\n/removeprice MEGAMIN"
+    );
   } else if (/^\/setprices/i.test(text)) {
     const lines = text.split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
     if (!lines.length) {
@@ -225,7 +252,7 @@ exports.handler = async (event) => {
       await sendTelegramMessage(chatId, `✅ ${parsed.name}: ${fmt(parsed.price)} ETB`);
     }
   } else {
-    await sendTelegramMessage(chatId, "Unknown command. Send /help to see what I can do.");
+    await sendTelegramMessage(chatId, "Unknown command. Tap ❓ Help or use the buttons below.");
   }
 
   return { statusCode: 200, body: "ok" };
