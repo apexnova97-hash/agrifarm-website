@@ -13,7 +13,7 @@
 // Commands (send these to your bot in Telegram):
 //   /setprice PRODUCT NAME PRICE      e.g. /setprice MEGAMIN 450
 //   /setprices                        then one "NAME PRICE" per line —
-//                                      for setting many prices in one go
+//                                     for setting many prices in one go
 //   /removeprice PRODUCT NAME         reverts that product to its default
 //   /prices                           lists every product and its price
 //   /help                             shows this command list
@@ -150,7 +150,13 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "ok" };
   }
 
-  const store = getStore("agrifarm-prices");
+  // --- UPDATED BLOBS INITIALIZATION ---
+  const store = getStore({
+    name: "agrifarm-prices",
+    siteID: process.env.SITE_ID,
+    token: process.env.NETLIFY_AUTH_TOKEN,
+  });
+
   const text = message.text.trim();
 
   if (/^\/(start|help)/i.test(text)) {
