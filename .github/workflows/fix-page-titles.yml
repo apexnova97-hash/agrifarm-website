@@ -1,0 +1,33 @@
+name: Fix Agrifarm page titles
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update titles only
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          title = 'AGRIFARM AGRICULTURAL INPUTS AND EQUIPMENT IMPORT PLC'
+          for name in ['index.html', 'about.html', 'products.html', 'contact.html']:
+              p = Path(name)
+              s = p.read_text(encoding='utf-8')
+              s, n = re.subn(r'<title>.*?</title>', f'<title>{title}</title>', s, count=1, flags=re.S)
+              if n != 1:
+                  raise SystemExit(f'Could not update title in {name}')
+              p.write_text(s, encoding='utf-8')
+      - name: Commit and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/fix-page-titles.yml
+          git add index.html about.html products.html contact.html .github/workflows/fix-page-titles.yml
+          git commit -m "Set Agrifarm company name in all page titles"
+          git push origin main
